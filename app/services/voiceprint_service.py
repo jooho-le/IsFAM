@@ -1,6 +1,7 @@
 import array
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import mean, median
 from typing import Any
 
 from app.repositories.family_repository import FamilyMemberRecord, FamilyRepository
@@ -21,6 +22,10 @@ class FamilyVoiceMatch:
     name: str
     relation: str
     similarity: float
+    sample_count: int = 1
+    max_similarity: float | None = None
+    mean_similarity: float | None = None
+    median_similarity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +108,7 @@ class VoiceprintService:
             )
 
         query_embedding = self.speaker_service.extract_embedding(wav_path)
-        candidates: list[FamilyVoiceMatch] = []
+        raw_matches: list[FamilyVoiceMatch] = []
 
         for record in records:
             stored_embedding = self.embedding_from_bytes(
@@ -114,7 +119,7 @@ class VoiceprintService:
                 query_embedding,
                 stored_embedding,
             )
-            candidates.append(
+            raw_matches.append(
                 FamilyVoiceMatch(
                     family_id=record.id,
                     name=record.name,
@@ -123,7 +128,7 @@ class VoiceprintService:
                 )
             )
 
-        candidates.sort(key=lambda candidate: candidate.similarity, reverse=True)
+        candidates = self._aggregate_family_matches(raw_matches)
         best_match = candidates[0]
         is_registered_family = best_match.similarity >= self.speaker_service.threshold
         message = (
@@ -140,6 +145,44 @@ class VoiceprintService:
             message=message,
             model_name=self.speaker_service.model_name,
         )
+
+    @staticmethod
+    def _aggregate_family_matches(
+        raw_matches: list[FamilyVoiceMatch],
+    ) -> list[FamilyVoiceMatch]:
+        """Group repeated voice samples for the same family profile.
+
+        A competition demo should not trust a single lucky similarity spike.
+        When the same name/relation is registered multiple times, the decision
+        score uses the median similarity and still exposes max/mean values for
+        explainability.
+        """
+
+        grouped: dict[tuple[str, str], list[FamilyVoiceMatch]] = {}
+        for match in raw_matches:
+            key = (match.name.strip().lower(), match.relation.strip().lower())
+            grouped.setdefault(key, []).append(match)
+
+        candidates: list[FamilyVoiceMatch] = []
+        for matches in grouped.values():
+            similarities = [match.similarity for match in matches]
+            representative = min(matches, key=lambda match: match.family_id)
+            median_similarity = round(float(median(similarities)), 4)
+            candidates.append(
+                FamilyVoiceMatch(
+                    family_id=representative.family_id,
+                    name=representative.name,
+                    relation=representative.relation,
+                    similarity=median_similarity,
+                    sample_count=len(matches),
+                    max_similarity=round(max(similarities), 4),
+                    mean_similarity=round(float(mean(similarities)), 4),
+                    median_similarity=median_similarity,
+                )
+            )
+
+        candidates.sort(key=lambda candidate: candidate.similarity, reverse=True)
+        return candidates
 
     @staticmethod
     def embedding_to_bytes(embedding: Any) -> bytes:

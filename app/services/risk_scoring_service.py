@@ -1,0 +1,146 @@
+from dataclasses import dataclass
+
+from app.services.anti_spoofing_service import AntiSpoofingResult
+from app.services.voiceprint_service import FamilyVerificationResult
+
+
+@dataclass(frozen=True)
+class RiskScoringResult:
+    is_trusted: bool
+    risk_level: str
+    risk_score: float
+    final_decision: str
+    reasons: list[str]
+
+
+class RiskScoringService:
+    """Combine speaker verification and anti-spoofing into one explainable decision."""
+
+    def __init__(self, strong_spoof_score: float):
+        self.strong_spoof_score = strong_spoof_score
+
+    def score_secure_voice(
+        self,
+        family_result: FamilyVerificationResult,
+        anti_spoofing_result: AntiSpoofingResult,
+    ) -> RiskScoringResult:
+        family_score, family_reasons = self._score_family_match(family_result)
+        spoof_score, spoof_reasons = self._score_spoof_signal(anti_spoofing_result)
+        stability_score, stability_reasons = self._score_voiceprint_stability(family_result)
+
+        risk_score = round(
+            min(1.0, family_score * 0.55 + spoof_score * 0.35 + stability_score * 0.10),
+            4,
+        )
+        risk_level = self._risk_level(risk_score)
+        is_trusted = (
+            risk_level == "low"
+            and family_result.is_registered_family
+            and not anti_spoofing_result.is_spoofed
+        )
+
+        return RiskScoringResult(
+            is_trusted=is_trusted,
+            risk_level=risk_level,
+            risk_score=risk_score,
+            final_decision=self._final_decision(
+                is_trusted=is_trusted,
+                family_result=family_result,
+                anti_spoofing_result=anti_spoofing_result,
+                risk_level=risk_level,
+            ),
+            reasons=family_reasons + spoof_reasons + stability_reasons,
+        )
+
+    @staticmethod
+    def _score_family_match(result: FamilyVerificationResult) -> tuple[float, list[str]]:
+        if result.best_match is None:
+            return 1.0, ["등록된 가족 voiceprint가 없어 가족 여부를 확인할 수 없습니다."]
+
+        similarity = result.best_match.similarity
+        margin = round(similarity - result.threshold, 4)
+        if result.is_registered_family:
+            score = 0.0 if margin >= 0.08 else 0.25
+            return score, [
+                f"{result.best_match.name} voiceprint와 유사도 {similarity:.4f}로 기준보다 {margin:.4f} 높습니다."
+            ]
+
+        if margin >= -0.08:
+            return 0.65, [
+                f"가장 가까운 가족 voiceprint 유사도 {similarity:.4f}가 기준에 근접하지만 통과하지 못했습니다."
+            ]
+
+        return 1.0, [
+            f"가장 가까운 가족 voiceprint 유사도 {similarity:.4f}가 기준보다 낮아 가족으로 신뢰하기 어렵습니다."
+        ]
+
+    def _score_spoof_signal(self, result: AntiSpoofingResult) -> tuple[float, list[str]]:
+        if result.spoof_score >= self.strong_spoof_score:
+            return 1.0, [
+                f"AI 합성 음성 의심 점수 {result.spoof_score:.4f}가 강한 경고 기준에 도달했습니다."
+            ]
+
+        if result.is_spoofed:
+            return 0.75, [
+                f"AI 합성 음성 의심 점수 {result.spoof_score:.4f}가 탐지 기준을 넘었습니다."
+            ]
+
+        if result.spoof_score >= result.threshold * 0.7:
+            return 0.35, [
+                f"AI 합성 음성 의심 점수 {result.spoof_score:.4f}가 기준에 근접합니다."
+            ]
+
+        return 0.0, [
+            f"AI 합성 음성 의심 점수 {result.spoof_score:.4f}가 기준보다 낮습니다."
+        ]
+
+    @staticmethod
+    def _score_voiceprint_stability(
+        result: FamilyVerificationResult,
+    ) -> tuple[float, list[str]]:
+        best_match = result.best_match
+        if best_match is None:
+            return 0.0, []
+
+        if best_match.sample_count < 3:
+            return 0.4, [
+                f"{best_match.name} 등록 샘플이 {best_match.sample_count}개라 안정성 판단에는 추가 샘플이 필요합니다."
+            ]
+
+        if best_match.max_similarity is None or best_match.median_similarity is None:
+            return 0.0, []
+
+        spread = round(best_match.max_similarity - best_match.median_similarity, 4)
+        if spread >= 0.15:
+            return 0.35, [
+                f"등록 샘플 간 유사도 편차가 {spread:.4f}로 커서 확인 필요 상태를 강화합니다."
+            ]
+
+        return 0.0, [
+            f"{best_match.sample_count}개 등록 샘플 기준 유사도 편차가 안정적입니다."
+        ]
+
+    @staticmethod
+    def _risk_level(risk_score: float) -> str:
+        if risk_score >= 0.65:
+            return "danger"
+        if risk_score >= 0.35:
+            return "caution"
+        return "safe"
+
+    @staticmethod
+    def _final_decision(
+        is_trusted: bool,
+        family_result: FamilyVerificationResult,
+        anti_spoofing_result: AntiSpoofingResult,
+        risk_level: str,
+    ) -> str:
+        if is_trusted:
+            return "trusted_family_voice"
+        if family_result.is_registered_family and anti_spoofing_result.is_spoofed:
+            return "spoofed_family_like_voice"
+        if not family_result.is_registered_family and anti_spoofing_result.is_spoofed:
+            return "spoofed_unknown_voice"
+        if risk_level == "caution":
+            return "family_voice_needs_confirmation"
+        return "unknown_real_voice"

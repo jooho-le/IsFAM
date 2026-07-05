@@ -42,6 +42,14 @@ class FamilyCandidateResponse(BaseModel):
     name: str = Field(..., examples=["엄마"])
     relation: str = Field(..., examples=["mother"])
     similarity: float = Field(..., examples=[0.86])
+    sample_count: int = Field(
+        default=1,
+        description="Number of registered samples grouped into this family profile.",
+        examples=[3],
+    )
+    max_similarity: float | None = Field(default=None, examples=[0.88])
+    mean_similarity: float | None = Field(default=None, examples=[0.84])
+    median_similarity: float | None = Field(default=None, examples=[0.85])
 
 
 class VerifyFamilyResponse(BaseModel):
@@ -78,6 +86,16 @@ class SecureVoiceVerificationResponse(BaseModel):
         description="True only when the voice matches a registered family member and is not spoofed.",
         examples=[True],
     )
+    risk_level: str = Field(..., examples=["safe"])
+    risk_score: float = Field(
+        ...,
+        description="Explainable IsFAM risk score from 0.0 to 1.0.",
+        examples=[0.18],
+    )
     final_decision: str = Field(..., examples=["trusted_family_voice"])
+    decision_reasons: list[str] = Field(
+        default_factory=list,
+        description="Human-readable reasons used for the final decision.",
+    )
     family_verification: VerifyFamilyResponse
     anti_spoofing: AntiSpoofingResponse

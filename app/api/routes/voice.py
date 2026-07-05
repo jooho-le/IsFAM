@@ -14,6 +14,7 @@ from app.schemas.voice import (
 )
 from app.services.anti_spoofing_service import AntiSpoofingError, AntiSpoofingResult
 from app.services.model_provider import get_anti_spoofing_service, get_speaker_service
+from app.services.risk_scoring_service import RiskScoringService
 from app.services.speaker_service import SpeakerVerificationError
 from app.services.voiceprint_service import (
     FamilyVerificationResult,
@@ -47,6 +48,10 @@ def _to_candidate_response(match: FamilyVoiceMatch) -> FamilyCandidateResponse:
         name=match.name,
         relation=match.relation,
         similarity=match.similarity,
+        sample_count=match.sample_count,
+        max_similarity=match.max_similarity,
+        mean_similarity=match.mean_similarity,
+        median_similarity=match.median_similarity,
     )
 
 
@@ -87,19 +92,6 @@ def _anti_spoofing_result_to_response(result: AntiSpoofingResult) -> AntiSpoofin
             for label_score in result.label_scores
         ],
     )
-
-
-def _make_secure_decision(
-    is_registered_family: bool,
-    is_spoofed: bool,
-) -> tuple[bool, str]:
-    if is_registered_family and not is_spoofed:
-        return True, "trusted_family_voice"
-    if is_registered_family and is_spoofed:
-        return False, "spoofed_family_like_voice"
-    if not is_registered_family and not is_spoofed:
-        return False, "unknown_real_voice"
-    return False, "spoofed_unknown_voice"
 
 
 @router.post("/compare", response_model=VoiceCompareResponse)
@@ -330,14 +322,19 @@ async def verify_family_voice_secure(
         family_result = voiceprint_service.verify_family_voice(wav_file)
         anti_spoofing_result = get_anti_spoofing_service().detect_file(wav_file)
 
-        is_trusted, final_decision = _make_secure_decision(
-            is_registered_family=family_result.is_registered_family,
-            is_spoofed=anti_spoofing_result.is_spoofed,
+        risk_result = RiskScoringService(
+            strong_spoof_score=settings.voice_session_strong_spoof_score,
+        ).score_secure_voice(
+            family_result=family_result,
+            anti_spoofing_result=anti_spoofing_result,
         )
 
         return SecureVoiceVerificationResponse(
-            is_trusted=is_trusted,
-            final_decision=final_decision,
+            is_trusted=risk_result.is_trusted,
+            risk_level=risk_result.risk_level,
+            risk_score=risk_result.risk_score,
+            final_decision=risk_result.final_decision,
+            decision_reasons=risk_result.reasons,
             family_verification=_family_result_to_response(family_result),
             anti_spoofing=_anti_spoofing_result_to_response(anti_spoofing_result),
         )

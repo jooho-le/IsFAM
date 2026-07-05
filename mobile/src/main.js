@@ -256,6 +256,34 @@ async function showAnalysisPopup() {
 }
 
 function buildWarning(data) {
+  if (data.risk_level) {
+    const reason = data.decision_reasons?.[0];
+    if (data.risk_level === "safe" && data.is_trusted) {
+      return {
+        status: "safety",
+        safe: true,
+        title: "등록된 가족 목소리입니다",
+        message: reason || "IsFAM 위험도 분석에서 안전으로 판단했습니다.",
+      };
+    }
+
+    if (data.risk_level === "caution") {
+      return {
+        status: "detect",
+        safe: false,
+        title: "가족 확인이 필요합니다",
+        message: reason || "IsFAM 위험도 분석에서 추가 확인이 필요하다고 판단했습니다.",
+      };
+    }
+
+    return {
+      status: "detect",
+      safe: false,
+      title: "보이스피싱이 의심됩니다",
+      message: reason || "IsFAM 위험도 분석에서 위험 통화로 판단했습니다.",
+    };
+  }
+
   const family = data.family_verification;
   const anti = data.anti_spoofing;
   const bestMatch = family?.best_match;
