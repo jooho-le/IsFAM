@@ -63,7 +63,7 @@ async def signup(
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> SignupResponse:
-    """Create a new account. The demo policy fixes verification_code to a constant value."""
+    """회원가입. 데모 정책상 verification_code는 123456으로 고정."""
 
     if body.verification_code != settings.auth_fixed_verification_code:
         raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, "AUTH_004", "verification code does not match")
@@ -94,6 +94,17 @@ async def login(
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> LoginResponse:
+    """로그인.
+
+    로그인 흐름: 1) signup 또는 login으로 access_token/refresh_token 발급
+    (verification_code는 데모용으로 123456 고정)
+    2) 우측 상단 Authorize 버튼에 access_token을 붙여넣으면 이후 인증이 필요한
+    엔드포인트에 자동 적용됨
+    3) access_token 만료 시 refresh로 재발급 (호출할 때마다 기존 refresh_token은
+    폐기되고 새로 발급되는 로테이션 방식)
+    4) logout은 현재 세션의 refresh_token만 폐기 (다른 기기 세션엔 영향 없음)
+    """
+
     user = UserRepository(db).get_by_phone_number(body.phone_number)
     if user is None:
         raise ApiError(status.HTTP_401_UNAUTHORIZED, "AUTH_001", "phone number is not registered")
@@ -115,7 +126,7 @@ async def logout(
     payload: dict = Depends(get_current_token_payload),
     db: Session = Depends(get_db),
 ) -> None:
-    """Revoke only the refresh_tokens row tied to this access token's session (`sid`)."""
+    """로그아웃. 지금 쓰고 있는 access_token의 세션(refresh_tokens row)만 폐기하며, 다른 기기 로그인 세션에는 영향 없음."""
 
     session_id = payload.get("sid")
     if session_id is None:
@@ -133,7 +144,7 @@ async def refresh(
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    """Rotate refresh tokens on every use: revoke the old row and issue a new one."""
+    """access_token 재발급. 호출할 때마다 기존 refresh_token은 폐기하고 새 access_token/refresh_token 쌍을 발급 (재사용 방지를 위한 로테이션)."""
 
     refresh_token_repository = RefreshTokenRepository(db)
     token = refresh_token_repository.get_by_hash(hash_token(body.refresh_token))
@@ -152,6 +163,8 @@ async def refresh(
 
 @router.get("/me", response_model=MeResponse)
 async def get_me(user: User = Depends(get_current_user)) -> MeResponse:
+    """내 프로필 조회. phone_number는 마스킹되어(010****1234) 내려감."""
+
     return MeResponse(
         user_id=user.id,
         display_name=user.display_name,

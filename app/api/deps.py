@@ -1,4 +1,5 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -7,14 +8,13 @@ from app.db.postgres import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
+# Registers a bearer-token security scheme so Swagger UI shows a single
+# "Authorize" lock button instead of a per-endpoint header field.
+_bearer_scheme = HTTPBearer()
 
-def get_bearer_token(authorization: str | None = Header(default=None)) -> str:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="missing or invalid Authorization header",
-        )
-    return authorization.split(" ", 1)[1].strip()
+
+def get_bearer_token(credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme)) -> str:
+    return credentials.credentials
 
 
 def get_current_token_payload(

@@ -439,7 +439,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. FastAPI 서버 실행
+### 2. Postgres 준비 (auth 등 신규 도메인용)
+
+기존 SQLite 기반 기능(가족 음성 등록, 통화 세션 분석, 데모)은 그대로 동작하고, `auth` 도메인부터는 Postgres를 사용합니다.
+
+```bash
+docker compose up -d   # Postgres 컨테이너 기동
+cp .env.example .env   # 최초 1회
+alembic upgrade head   # 테이블 생성/마이그레이션 적용
+```
+
+기본 접속 정보는 `.env.example`에 있습니다 (호스트 `127.0.0.1`, 포트 `5433`, DB/유저/비밀번호 모두 `isfam`). 5432가 아니라 5433인 이유는 로컬에 다른 Postgres가 이미 떠 있을 때 포트 충돌을 피하기 위해서입니다.
+
+### 3. FastAPI 서버 실행
 
 ```bash
 uvicorn app.main:app --reload
@@ -457,7 +469,9 @@ Swagger 문서:
 http://127.0.0.1:8000/docs
 ```
 
-### 3. 모바일 데모 실행
+`auth` 태그에서 `signup`/`login`으로 토큰을 받고, 우측 상단 `Authorize` 버튼에 `access_token`을 넣으면 인증이 필요한 엔드포인트도 바로 테스트할 수 있습니다.
+
+### 4. 모바일 데모 실행
 
 ```bash
 cd mobile
@@ -496,6 +510,12 @@ ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE
 
 ISFAM_DATABASE_PATH
 SQLite DB 경로, 기본값 data/isfam.sqlite3
+
+ISFAM_DATABASE_URL
+auth 등 Postgres 도메인용 접속 주소 (.env.example 참고)
+
+ISFAM_JWT_SECRET_KEY
+JWT 서명 키, 로컬 개발 기본값 그대로 두면 안 되고 배포 시 반드시 변경
 
 ISFAM_DEVICE
 cpu, cuda, auto 중 선택
