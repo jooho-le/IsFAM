@@ -42,6 +42,17 @@ class Settings:
     database_path: Path = Path("data/isfam.sqlite3")
     demo_sample_dir: Path = Path("demo_samples")
 
+    # Postgres connection for the product domains (auth, family, devices, ...).
+    # Existing SQLite-backed domains keep using `database_path` until they migrate.
+    database_url: str = "postgresql+psycopg2://isfam:isfam@127.0.0.1:5433/isfam"
+
+    # Auth / JWT settings.
+    jwt_secret_key: str = "dev-only-change-me"
+    jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 14
+    # Demo policy: verification_code is fixed instead of sending a real SMS OTP.
+    auth_fixed_verification_code: str = "123456"
+
     # Hugging Face audio classification model for real/spoof voice detection.
     anti_spoofing_model_name: str = "Vansh180/deepfake-audio-wav2vec2"
     anti_spoofing_model_dir: Path = Path("pretrained_models/deepfake-audio-wav2vec2")
@@ -123,6 +134,20 @@ class Settings:
             raise ValueError("ISFAM_MIN_AUDIO_SECONDS must be greater than or equal to 0.1")
         if self.target_sample_rate < 8000:
             raise ValueError("ISFAM_TARGET_SAMPLE_RATE must be greater than or equal to 8000")
+        if not self.database_url:
+            raise ValueError("ISFAM_DATABASE_URL must not be empty")
+        if not self.jwt_secret_key:
+            raise ValueError("ISFAM_JWT_SECRET_KEY must not be empty")
+        if self.jwt_access_token_expire_minutes < 1:
+            raise ValueError(
+                "ISFAM_JWT_ACCESS_TOKEN_EXPIRE_MINUTES must be greater than or equal to 1"
+            )
+        if self.jwt_refresh_token_expire_days < 1:
+            raise ValueError(
+                "ISFAM_JWT_REFRESH_TOKEN_EXPIRE_DAYS must be greater than or equal to 1"
+            )
+        if not self.auth_fixed_verification_code:
+            raise ValueError("ISFAM_AUTH_FIXED_VERIFICATION_CODE must not be empty")
 
     @property
     def max_upload_size_bytes(self) -> int:
@@ -311,4 +336,19 @@ def get_settings() -> Settings:
         max_upload_size_mb=_get_int_env("ISFAM_MAX_UPLOAD_SIZE_MB", 25, dotenv_values),
         min_audio_seconds=_get_float_env("ISFAM_MIN_AUDIO_SECONDS", 1.0, dotenv_values),
         target_sample_rate=_get_int_env("ISFAM_TARGET_SAMPLE_RATE", 16000, dotenv_values),
+        database_url=_get_env(
+            "ISFAM_DATABASE_URL",
+            "postgresql+psycopg2://isfam:isfam@127.0.0.1:5433/isfam",
+            dotenv_values,
+        ),
+        jwt_secret_key=_get_env("ISFAM_JWT_SECRET_KEY", "dev-only-change-me", dotenv_values),
+        jwt_access_token_expire_minutes=_get_int_env(
+            "ISFAM_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 30, dotenv_values
+        ),
+        jwt_refresh_token_expire_days=_get_int_env(
+            "ISFAM_JWT_REFRESH_TOKEN_EXPIRE_DAYS", 14, dotenv_values
+        ),
+        auth_fixed_verification_code=_get_env(
+            "ISFAM_AUTH_FIXED_VERIFICATION_CODE", "123456", dotenv_values
+        ),
     )
