@@ -449,7 +449,6 @@ cp .env.example .env   # 최초 1회
 alembic upgrade head   # 테이블 생성/마이그레이션 적용
 ```
 
-기본 접속 정보는 `.env.example`에 있습니다 (호스트 `127.0.0.1`, 포트 `5433`, DB/유저/비밀번호 모두 `isfam`). 5432가 아니라 5433인 이유는 로컬에 다른 Postgres가 이미 떠 있을 때 포트 충돌을 피하기 위해서입니다.
 
 ### 3. FastAPI 서버 실행
 
@@ -469,7 +468,6 @@ Swagger 문서:
 http://127.0.0.1:8000/docs
 ```
 
-`auth` 태그에서 `signup`/`login`으로 토큰을 받고, 우측 상단 `Authorize` 버튼에 `access_token`을 넣으면 인증이 필요한 엔드포인트도 바로 테스트할 수 있습니다.
 
 ### 4. 모바일 데모 실행
 
