@@ -180,7 +180,7 @@ median_similarity
 
 ### 설명 가능한 위험도
 
-`/api/v1/voice/verify-family-secure` 응답은 단순 boolean만 반환하지 않습니다.
+`/api/v1/voice/verify` 응답은 단순 boolean만 반환하지 않습니다.
 
 ```json
 {
@@ -390,7 +390,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/voice/verify-family \
 ### 가족 여부 + 딥보이스 통합 판단
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/voice/verify-family-secure \
+curl -X POST http://127.0.0.1:8000/api/v1/voice/verify \
   -F "audio_file=@samples/call.wav"
 ```
 
@@ -402,6 +402,9 @@ curl -X POST http://127.0.0.1:8000/api/v1/voice/verify-family-secure \
   "risk_level": "safe",
   "risk_score": 0.04,
   "final_decision": "trusted_family_voice",
+  "processing_time_ms": 842.31,
+  "family_model_time_ms": 231.45,
+  "anti_spoofing_model_time_ms": 610.52,
   "decision_reasons": [
     "엄마 voiceprint와 유사도 0.8123로 기준보다 0.0623 높습니다.",
     "AI 합성 음성 의심 점수 0.0100가 기준보다 낮습니다.",
@@ -409,6 +412,9 @@ curl -X POST http://127.0.0.1:8000/api/v1/voice/verify-family-secure \
   ]
 }
 ```
+
+세 시간 값은 서버에서 측정한 모델 처리 시간입니다. 이를 이용하면 환경별로
+가족 확인 모델, AI 음성 탐지 모델 중 어느 단계가 느린지 바로 확인할 수 있습니다.
 
 ### 통화 세션 시작
 

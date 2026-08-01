@@ -121,5 +121,20 @@ class SecureVoiceVerificationResponse(BaseModel):
         default_factory=list,
         description="Human-readable reasons used for the final decision.",
     )
+    processing_time_ms: float = Field(
+        ...,
+        description="Total server-side model orchestration time in milliseconds.",
+        examples=[842.31],
+    )
+    family_model_time_ms: float = Field(
+        ...,
+        description="Family voice verification time in milliseconds.",
+        examples=[231.45],
+    )
+    anti_spoofing_model_time_ms: float = Field(
+        ...,
+        description="AI-generated voice detection time in milliseconds.",
+        examples=[610.52],
+    )
     family_verification: VerifyFamilyResponse
     anti_spoofing: AntiSpoofingResponse
