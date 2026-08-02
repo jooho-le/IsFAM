@@ -92,9 +92,25 @@ class VerifyFamilyResponse(BaseModel):
     )
 
 
+class VoiceAudioQualityResponse(BaseModel):
+    """Quality measurements for a one-shot verification upload."""
+
+    is_analyzable: bool
+    message: str
+    duration_seconds: float
+    rms_energy: float
+    peak_amplitude: float
+    speech_ratio: float
+
+
 class SecureVoiceVerificationResponse(BaseModel):
     """Combined family verification and anti-spoofing result."""
 
+    analysis_status: str = Field(
+        ...,
+        description="complete or more_voice_required when call audio quality is weak.",
+        examples=["complete"],
+    )
     is_trusted: bool = Field(
         ...,
         description="True only when the voice matches a registered family member and is not spoofed.",
@@ -135,6 +151,10 @@ class SecureVoiceVerificationResponse(BaseModel):
         ...,
         description="AI-generated voice detection time in milliseconds.",
         examples=[610.52],
+    )
+    audio_quality: VoiceAudioQualityResponse = Field(
+        ...,
+        description="Input quality measurements used to adjust result confidence.",
     )
     family_verification: VerifyFamilyResponse
     anti_spoofing: AntiSpoofingResponse

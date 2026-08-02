@@ -10,6 +10,7 @@ from app.schemas.voice import (
     FamilyCandidateResponse,
     SecureVoiceVerificationResponse,
     VerifyFamilyResponse,
+    VoiceAudioQualityResponse,
     VoiceCompareResponse,
 )
 from app.services.anti_spoofing_service import AntiSpoofingError, AntiSpoofingResult
@@ -33,6 +34,7 @@ from app.utils.audio import (
     convert_audio_to_standard_wav,
     save_upload_file_to_temp,
 )
+from app.utils.audio_quality import AudioQualityError, analyze_standard_wav_quality
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +330,13 @@ async def verify_voice(
         )
         temp_paths.append(wav_file)
 
+        audio_quality = analyze_standard_wav_quality(
+            wav_path=wav_file,
+            target_sample_rate=settings.target_sample_rate,
+            min_analyzable_seconds=settings.voice_session_min_analyzable_seconds,
+            min_rms_energy=settings.voice_session_min_rms_energy,
+            min_speech_ratio=settings.voice_session_min_speech_ratio,
+        )
         result = SecureVoiceVerificationService(
             voiceprint_service=VoiceprintService(
                 family_repository=family_repository,
@@ -337,9 +346,12 @@ async def verify_voice(
             risk_scoring_service=RiskScoringService(
                 strong_spoof_score=settings.voice_session_strong_spoof_score,
             ),
-        ).verify(wav_file)
+        ).verify(wav_file, audio_quality=audio_quality)
 
         return SecureVoiceVerificationResponse(
+            analysis_status=(
+                "complete" if audio_quality.is_analyzable else "more_voice_required"
+            ),
             is_trusted=result.risk.is_trusted,
             risk_level=result.risk.risk_level,
             risk_score=result.risk.risk_score,
@@ -350,6 +362,14 @@ async def verify_voice(
             processing_time_ms=result.processing_time_ms,
             family_model_time_ms=result.family_model_time_ms,
             anti_spoofing_model_time_ms=result.anti_spoofing_model_time_ms,
+            audio_quality=VoiceAudioQualityResponse(
+                is_analyzable=audio_quality.is_analyzable,
+                message=audio_quality.message,
+                duration_seconds=audio_quality.duration_seconds,
+                rms_energy=audio_quality.rms_energy,
+                peak_amplitude=audio_quality.peak_amplitude,
+                speech_ratio=audio_quality.speech_ratio,
+            ),
             family_verification=_family_result_to_response(result.family_verification),
             anti_spoofing=_anti_spoofing_result_to_response(result.anti_spoofing),
         )
@@ -382,6 +402,13 @@ async def verify_voice(
     except AudioValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except HTTPException:
+        raise
+    except AudioQualityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
     except (SpeakerVerificationError, AntiSpoofingError) as exc:

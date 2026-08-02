@@ -5,6 +5,7 @@ from app.services.anti_spoofing_service import AntiSpoofingResult, LabelScore
 from app.services.risk_scoring_service import RiskScoringService
 from app.services.secure_voice_service import SecureVoiceVerificationService
 from app.services.voiceprint_service import FamilyVerificationResult, FamilyVoiceMatch
+from app.utils.audio_quality import AudioQualityResult
 
 
 class _VoiceprintStub:
@@ -27,8 +28,11 @@ class _AntiSpoofingStub:
         return self.result
 
 
-def _family_result(is_family: bool) -> FamilyVerificationResult:
-    similarity = 0.82 if is_family else 0.40
+def _family_result(
+    is_family: bool,
+    similarity: float | None = None,
+) -> FamilyVerificationResult:
+    similarity = similarity if similarity is not None else (0.82 if is_family else 0.40)
     match = FamilyVoiceMatch(
         family_id=1,
         name="엄마",
@@ -98,3 +102,54 @@ class SecureVoiceVerificationServiceTest(TestCase):
         result = self._verify(is_family=False, is_spoofed=True)
         self.assertFalse(result.risk.is_trusted)
         self.assertEqual(result.risk.final_decision, "spoofed_unknown_voice")
+
+    def test_barely_passing_family_match_requires_confirmation(self):
+        family_stub = _VoiceprintStub(_family_result(True, similarity=0.66))
+        spoof_stub = _AntiSpoofingStub(_spoof_result(False))
+        result = SecureVoiceVerificationService(
+            voiceprint_service=family_stub,  # type: ignore[arg-type]
+            anti_spoofing_service=spoof_stub,  # type: ignore[arg-type]
+            risk_scoring_service=RiskScoringService(strong_spoof_score=0.8),
+        ).verify(Path("unused.wav"))
+        self.assertFalse(result.risk.is_trusted)
+        self.assertEqual(result.risk.risk_level, "caution")
+        self.assertEqual(result.risk.final_decision, "family_voice_needs_confirmation")
+
+    def test_low_quality_audio_runs_models_but_requires_more_voice(self):
+        family_stub = _VoiceprintStub(_family_result(True))
+        spoof_stub = _AntiSpoofingStub(_spoof_result(False))
+        service = SecureVoiceVerificationService(
+            voiceprint_service=family_stub,  # type: ignore[arg-type]
+            anti_spoofing_service=spoof_stub,  # type: ignore[arg-type]
+            risk_scoring_service=RiskScoringService(strong_spoof_score=0.8),
+        )
+        result = service.verify(
+            Path("unused.wav"),
+            audio_quality=AudioQualityResult(
+                is_analyzable=False,
+                message="low_energy_or_silence",
+                duration_seconds=3.0,
+                rms_energy=0.001,
+                peak_amplitude=0.01,
+                speech_ratio=0.1,
+            ),
+        )
+        self.assertEqual(family_stub.calls, 1)
+        self.assertEqual(spoof_stub.calls, 1)
+        self.assertFalse(result.risk.is_trusted)
+        self.assertEqual(result.risk.risk_level, "caution")
+        self.assertEqual(result.risk.final_decision, "more_voice_required")
+
+    def test_low_quality_does_not_promote_unreliable_model_output_to_danger(self):
+        service = SecureVoiceVerificationService(
+            voiceprint_service=_VoiceprintStub(_family_result(False)),  # type: ignore[arg-type]
+            anti_spoofing_service=_AntiSpoofingStub(_spoof_result(True)),  # type: ignore[arg-type]
+            risk_scoring_service=RiskScoringService(strong_spoof_score=0.8),
+        )
+        result = service.verify(
+            Path("unused.wav"),
+            audio_quality=AudioQualityResult(False, "too_little_speech", 3.0, 0.01, 0.1, 0.1),
+        )
+        self.assertEqual(result.risk.risk_level, "caution")
+        self.assertEqual(result.risk.final_decision, "more_voice_required")
+        self.assertTrue(result.anti_spoofing.is_spoofed)

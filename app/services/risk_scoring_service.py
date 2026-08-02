@@ -107,7 +107,9 @@ class RiskScoringService:
                 risk_score = max(risk_score, 0.45)
 
         if family_result.is_registered_family and margin < 0.03:
-            risk_score = max(risk_score, 0.25)
+            # A barely passing match may be a degraded family recording or a
+            # similar-sounding impostor. Require another sample instead of trust.
+            risk_score = max(risk_score, 0.35)
 
         if family_result.is_registered_family and anti_spoofing_result.is_spoofed:
             risk_score = max(risk_score, 0.55)
