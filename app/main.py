@@ -14,6 +14,7 @@ from app.api.routes.voice import router as voice_router
 from app.api.routes.voice_session import router as voice_session_router
 from app.core.config import get_settings
 from app.db.session import init_db
+from app.services.model_provider import preload_models
 
 
 def configure_logging() -> None:
@@ -35,6 +36,9 @@ async def lifespan(_: FastAPI):
     """Initialize local SQLite tables when the API server starts."""
 
     init_db(settings)
+    if settings.preload_models:
+        logging.getLogger(__name__).info("Preloading AI models before accepting requests")
+        preload_models()
     yield
 
 

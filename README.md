@@ -499,6 +499,8 @@ http://127.0.0.1:5173
 ISFAM_SPEAKER_THRESHOLD=0.65 uvicorn app.main:app --reload
 ISFAM_ANTI_SPOOFING_THRESHOLD=0.50 uvicorn app.main:app --reload
 ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE=0.80 uvicorn app.main:app --reload
+ISFAM_ANTI_SPOOFING_BATCH_SIZE=4 uvicorn app.main:app --reload
+ISFAM_PRELOAD_MODELS=true uvicorn app.main:app --reload
 ISFAM_DEVICE=cpu uvicorn app.main:app --reload
 ```
 
@@ -513,6 +515,12 @@ AI 합성 음성 탐지 기준
 
 ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE
 즉시 위험으로 볼 강한 spoof 기준
+
+ISFAM_ANTI_SPOOFING_BATCH_SIZE
+딥보이스 음성 구간을 한 번에 처리할 배치 크기, 기본값 4
+
+ISFAM_PRELOAD_MODELS
+서버 시작 시 두 AI 모델을 로드하고 워밍업할지 여부, 기본값 true
 
 ISFAM_DATABASE_PATH
 SQLite DB 경로, 기본값 data/isfam.sqlite3

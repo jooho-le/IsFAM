@@ -68,6 +68,8 @@ class Settings:
     anti_spoofing_max_audio_seconds: float = 60.0
     anti_spoofing_window_seconds: float = 5.0
     anti_spoofing_hop_seconds: float = 2.5
+    anti_spoofing_batch_size: int = 4
+    preload_models: bool = True
 
     # Chunk session policy. These values reduce noisy decisions without model retraining.
     voice_session_min_analyzable_seconds: float = 2.0
@@ -103,6 +105,8 @@ class Settings:
             )
         if self.anti_spoofing_hop_seconds <= 0:
             raise ValueError("ISFAM_ANTI_SPOOFING_HOP_SECONDS must be greater than 0")
+        if self.anti_spoofing_batch_size < 1:
+            raise ValueError("ISFAM_ANTI_SPOOFING_BATCH_SIZE must be at least 1")
         if self.voice_session_min_analyzable_seconds < self.min_audio_seconds:
             raise ValueError(
                 "ISFAM_VOICE_SESSION_MIN_ANALYZABLE_SECONDS must be greater than "
@@ -184,6 +188,15 @@ def _get_int_env(name: str, default: int, dotenv_values: dict[str, str]) -> int:
 
 def _get_float_env(name: str, default: float, dotenv_values: dict[str, str]) -> float:
     return float(_get_env(name, str(default), dotenv_values))
+
+
+def _get_bool_env(name: str, default: bool, dotenv_values: dict[str, str]) -> bool:
+    raw_value = _get_env(name, str(default), dotenv_values).strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
 
 
 def _get_tuple_env(
@@ -296,6 +309,10 @@ def get_settings() -> Settings:
             2.5,
             dotenv_values,
         ),
+        anti_spoofing_batch_size=_get_int_env(
+            "ISFAM_ANTI_SPOOFING_BATCH_SIZE", 4, dotenv_values
+        ),
+        preload_models=_get_bool_env("ISFAM_PRELOAD_MODELS", True, dotenv_values),
         voice_session_min_analyzable_seconds=_get_float_env(
             "ISFAM_VOICE_SESSION_MIN_ANALYZABLE_SECONDS",
             2.0,

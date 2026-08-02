@@ -70,6 +70,7 @@ class AntiSpoofingService:
         self.max_audio_seconds = settings.anti_spoofing_max_audio_seconds
         self.window_seconds = settings.anti_spoofing_window_seconds
         self.hop_seconds = settings.anti_spoofing_hop_seconds
+        self.batch_size = settings.anti_spoofing_batch_size
         self.spoof_labels = {
             self._normalize_label(label)
             for label in settings.anti_spoofing_spoof_labels
@@ -94,7 +95,21 @@ class AntiSpoofingService:
         )
         self.model.to(self.device)
         self.model.eval()
+        self._is_warmed_up = False
         logger.info("Anti-spoofing model loaded")
+
+    def warm_up(self) -> None:
+        """Initialize inference kernels before the first user request."""
+
+        if self._is_warmed_up:
+            return
+        sample_count = max(1, int(self.target_sample_rate * self.window_seconds))
+        silent_segment = [0.0] * sample_count
+        self._predict_batch_label_scores(
+            [silent_segment] * self.batch_size
+        )
+        self._is_warmed_up = True
+        logger.info("Anti-spoofing model warmed up with batch_size=%s", self.batch_size)
 
     def detect_file(self, wav_path: Path) -> AntiSpoofingResult:
         """Run real/spoof classification on multiple windows of a normalized wav file."""
@@ -107,18 +122,22 @@ class AntiSpoofingService:
         segment_results: list[tuple[int, float, LabelScore, list[LabelScore]]] = []
 
         try:
-            for segment_index, segment_samples in enumerate(self._iter_audio_segments(samples)):
-                label_scores = self._predict_label_scores(segment_samples)
-                spoof_score = round(
-                    sum(
-                        label_score.score
-                        for label_score in label_scores
-                        if self._normalize_label(label_score.label) in self.spoof_labels
-                    ),
-                    4,
-                )
-                predicted = max(label_scores, key=lambda label_score: label_score.score)
-                segment_results.append((segment_index, spoof_score, predicted, label_scores))
+            segments = self._iter_audio_segments(samples)
+            for batch_start in range(0, len(segments), self.batch_size):
+                batch = segments[batch_start : batch_start + self.batch_size]
+                batch_scores = self._predict_batch_label_scores(batch)
+                for batch_index, label_scores in enumerate(batch_scores):
+                    segment_index = batch_start + batch_index
+                    spoof_score = round(
+                        sum(
+                            label_score.score
+                            for label_score in label_scores
+                            if self._normalize_label(label_score.label) in self.spoof_labels
+                        ),
+                        4,
+                    )
+                    predicted = max(label_scores, key=lambda label_score: label_score.score)
+                    segment_results.append((segment_index, spoof_score, predicted, label_scores))
         except Exception as exc:
             logger.exception("Failed to run anti-spoofing inference: %s", wav_path)
             raise AntiSpoofingError("failed to run anti-spoofing inference") from exc
@@ -147,11 +166,15 @@ class AntiSpoofingService:
             label_scores=label_scores,
         )
 
-    def _predict_label_scores(self, samples: list[float]) -> list[LabelScore]:
+    def _predict_batch_label_scores(
+        self,
+        segments: list[list[float]],
+    ) -> list[list[LabelScore]]:
         inputs = self.feature_extractor(
-            samples,
+            segments,
             sampling_rate=self.target_sample_rate,
             return_tensors="pt",
+            padding=True,
         )
         inputs = {
             key: value.to(self.device)
@@ -160,9 +183,9 @@ class AntiSpoofingService:
 
         with self.torch.inference_mode():
             outputs = self.model(**inputs)
-            probabilities = self.torch.softmax(outputs.logits, dim=-1)[0].detach().cpu()
+            probabilities = self.torch.softmax(outputs.logits, dim=-1).detach().cpu()
 
-        return self._build_label_scores(probabilities)
+        return [self._build_label_scores(row) for row in probabilities]
 
     def _iter_audio_segments(self, samples: list[float]) -> list[list[float]]:
         """Split audio into overlapping windows and include the tail window."""
