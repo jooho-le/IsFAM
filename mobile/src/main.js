@@ -329,7 +329,7 @@ function buildWarning(data) {
 async function analyzeFile(file) {
   const formData = new FormData();
   formData.append("audio_file", file);
-  return requestJson("/api/v1/voice/verify-family-secure", {
+  return requestJson("/api/v1/voice/verify", {
     method: "POST",
     body: formData,
   });

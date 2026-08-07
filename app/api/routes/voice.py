@@ -10,11 +10,13 @@ from app.schemas.voice import (
     FamilyCandidateResponse,
     SecureVoiceVerificationResponse,
     VerifyFamilyResponse,
+    VoiceAudioQualityResponse,
     VoiceCompareResponse,
 )
 from app.services.anti_spoofing_service import AntiSpoofingError, AntiSpoofingResult
 from app.services.model_provider import get_anti_spoofing_service, get_speaker_service
 from app.services.risk_scoring_service import RiskScoringService
+from app.services.secure_voice_service import SecureVoiceVerificationService
 from app.services.speaker_service import SpeakerVerificationError
 from app.services.voiceprint_service import (
     FamilyVerificationResult,
@@ -32,6 +34,7 @@ from app.utils.audio import (
     convert_audio_to_standard_wav,
     save_upload_file_to_temp,
 )
+from app.utils.audio_quality import AudioQualityError, analyze_standard_wav_quality
 
 logger = logging.getLogger(__name__)
 
@@ -290,8 +293,14 @@ async def verify_family_voice(
         cleanup_temp_files(temp_paths)
 
 
-@router.post("/verify-family-secure", response_model=SecureVoiceVerificationResponse)
-async def verify_family_voice_secure(
+@router.post("/verify", response_model=SecureVoiceVerificationResponse)
+@router.post(
+    "/verify-family-secure",
+    response_model=SecureVoiceVerificationResponse,
+    deprecated=True,
+    include_in_schema=False,
+)
+async def verify_voice(
     audio_file: UploadFile | None = File(
         default=None,
         description="New call voice file for family verification plus anti-spoofing.",
@@ -299,7 +308,7 @@ async def verify_family_voice_secure(
     settings: Settings = Depends(get_settings),
     family_repository: FamilyRepository = Depends(get_family_repository),
 ) -> SecureVoiceVerificationResponse:
-    """Compare one voice against family voiceprints and run deepfake detection."""
+    """Run family verification and AI-generated voice detection in one request."""
 
     temp_paths: list[Path | None] = []
 
@@ -321,30 +330,48 @@ async def verify_family_voice_secure(
         )
         temp_paths.append(wav_file)
 
-        voiceprint_service = VoiceprintService(
-            family_repository=family_repository,
-            speaker_service=get_speaker_service(),
+        audio_quality = analyze_standard_wav_quality(
+            wav_path=wav_file,
+            target_sample_rate=settings.target_sample_rate,
+            min_analyzable_seconds=settings.voice_session_min_analyzable_seconds,
+            min_rms_energy=settings.voice_session_min_rms_energy,
+            min_speech_ratio=settings.voice_session_min_speech_ratio,
         )
-        family_result = voiceprint_service.verify_family_voice(wav_file)
-        anti_spoofing_result = get_anti_spoofing_service().detect_file(wav_file)
-
-        risk_result = RiskScoringService(
-            strong_spoof_score=settings.voice_session_strong_spoof_score,
-        ).score_secure_voice(
-            family_result=family_result,
-            anti_spoofing_result=anti_spoofing_result,
-        )
+        result = SecureVoiceVerificationService(
+            voiceprint_service=VoiceprintService(
+                family_repository=family_repository,
+                speaker_service=get_speaker_service(),
+            ),
+            anti_spoofing_service=get_anti_spoofing_service(),
+            risk_scoring_service=RiskScoringService(
+                strong_spoof_score=settings.voice_session_strong_spoof_score,
+            ),
+        ).verify(wav_file, audio_quality=audio_quality)
 
         return SecureVoiceVerificationResponse(
-            is_trusted=risk_result.is_trusted,
-            risk_level=risk_result.risk_level,
-            risk_score=risk_result.risk_score,
-            family_confidence=risk_result.family_confidence,
-            mismatch_confidence=risk_result.mismatch_confidence,
-            final_decision=risk_result.final_decision,
-            decision_reasons=risk_result.reasons,
-            family_verification=_family_result_to_response(family_result),
-            anti_spoofing=_anti_spoofing_result_to_response(anti_spoofing_result),
+            analysis_status=(
+                "complete" if audio_quality.is_analyzable else "more_voice_required"
+            ),
+            is_trusted=result.risk.is_trusted,
+            risk_level=result.risk.risk_level,
+            risk_score=result.risk.risk_score,
+            family_confidence=result.risk.family_confidence,
+            mismatch_confidence=result.risk.mismatch_confidence,
+            final_decision=result.risk.final_decision,
+            decision_reasons=result.risk.reasons,
+            processing_time_ms=result.processing_time_ms,
+            family_model_time_ms=result.family_model_time_ms,
+            anti_spoofing_model_time_ms=result.anti_spoofing_model_time_ms,
+            audio_quality=VoiceAudioQualityResponse(
+                is_analyzable=audio_quality.is_analyzable,
+                message=audio_quality.message,
+                duration_seconds=audio_quality.duration_seconds,
+                rms_energy=audio_quality.rms_energy,
+                peak_amplitude=audio_quality.peak_amplitude,
+                speech_ratio=audio_quality.speech_ratio,
+            ),
+            family_verification=_family_result_to_response(result.family_verification),
+            anti_spoofing=_anti_spoofing_result_to_response(result.anti_spoofing),
         )
 
     except MissingAudioFileError as exc:
@@ -375,6 +402,13 @@ async def verify_family_voice_secure(
     except AudioValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except HTTPException:
+        raise
+    except AudioQualityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
     except (SpeakerVerificationError, AntiSpoofingError) as exc:

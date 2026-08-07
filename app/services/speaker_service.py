@@ -85,7 +85,23 @@ class SpeakerVerificationService:
             savedir=str(settings.speaker_model_dir),
             run_opts={"device": self.device},
         )
+        self._is_warmed_up = False
         logger.info("Speaker verification model loaded")
+
+    def warm_up(self) -> None:
+        """Initialize inference kernels before the first user request."""
+
+        if self._is_warmed_up:
+            return
+        waveform = self.torch.zeros(
+            (1, self.target_sample_rate * 3),
+            dtype=self.torch.float32,
+            device=self.device,
+        )
+        with self.torch.inference_mode():
+            self.classifier.encode_batch(waveform, normalize=True)
+        self._is_warmed_up = True
+        logger.info("Speaker verification model warmed up")
 
     def compare_files(self, audio_file_1: Path, audio_file_2: Path) -> SpeakerComparisonResult:
         """Extract embeddings from two audio files and compare them."""
