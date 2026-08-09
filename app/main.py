@@ -38,7 +38,7 @@ async def lifespan(_: FastAPI):
     init_db(settings)
     if settings.preload_models:
         logging.getLogger(__name__).info("Preloading AI models before accepting requests")
-        preload_models()
+        preload_models(include_speaker=settings.preload_speaker_model)
     yield
 
 

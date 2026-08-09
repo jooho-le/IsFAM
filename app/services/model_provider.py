@@ -19,10 +19,11 @@ def get_anti_spoofing_service() -> AntiSpoofingService:
     return AntiSpoofingService(get_settings())
 
 
-def preload_models() -> None:
-    """Load and warm both models before the API begins serving traffic."""
+def preload_models(*, include_speaker: bool = True) -> None:
+    """Load and warm requested models before the API begins serving traffic."""
 
-    speaker_service = get_speaker_service()
     anti_spoofing_service = get_anti_spoofing_service()
-    speaker_service.warm_up()
     anti_spoofing_service.warm_up()
+    if include_speaker:
+        speaker_service = get_speaker_service()
+        speaker_service.warm_up()

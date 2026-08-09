@@ -70,6 +70,7 @@ class Settings:
     anti_spoofing_hop_seconds: float = 2.5
     anti_spoofing_batch_size: int = 4
     preload_models: bool = True
+    preload_speaker_model: bool = True
 
     # Chunk session policy. These values reduce noisy decisions without model retraining.
     voice_session_min_analyzable_seconds: float = 2.0
@@ -313,6 +314,9 @@ def get_settings() -> Settings:
             "ISFAM_ANTI_SPOOFING_BATCH_SIZE", 4, dotenv_values
         ),
         preload_models=_get_bool_env("ISFAM_PRELOAD_MODELS", True, dotenv_values),
+        preload_speaker_model=_get_bool_env(
+            "ISFAM_PRELOAD_SPEAKER_MODEL", True, dotenv_values
+        ),
         voice_session_min_analyzable_seconds=_get_float_env(
             "ISFAM_VOICE_SESSION_MIN_ANALYZABLE_SECONDS",
             2.0,
