@@ -1,10 +1,15 @@
 import logging
 from pathlib import Path
+from time import perf_counter
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.config import Settings, get_settings
-from app.schemas.anti_spoofing import AntiSpoofingLabelScore, AntiSpoofingResponse
+from app.schemas.anti_spoofing import (
+    AntiSpoofingAudioQuality,
+    AntiSpoofingLabelScore,
+    AntiSpoofingResponse,
+)
 from app.services.anti_spoofing_service import AntiSpoofingError, AntiSpoofingResult
 from app.services.model_provider import get_anti_spoofing_service
 from app.utils.audio import (
@@ -18,14 +23,22 @@ from app.utils.audio import (
     convert_audio_to_standard_wav,
     save_upload_file_to_temp,
 )
+from app.utils.audio_quality import AudioQualityError, analyze_standard_wav_quality
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/anti-spoofing", tags=["anti-spoofing"])
 
 
-def anti_spoofing_result_to_response(result: AntiSpoofingResult) -> AntiSpoofingResponse:
+def anti_spoofing_result_to_response(
+    result: AntiSpoofingResult,
+    *,
+    processing_time_ms: float,
+    audio_quality: AntiSpoofingAudioQuality,
+) -> AntiSpoofingResponse:
     return AntiSpoofingResponse(
+        analysis_status=("complete" if audio_quality.is_analyzable else "more_voice_required"),
+        processing_time_ms=processing_time_ms,
         is_spoofed=result.is_spoofed,
         spoof_score=result.spoof_score,
         threshold=result.threshold,
@@ -40,6 +53,7 @@ def anti_spoofing_result_to_response(result: AntiSpoofingResult) -> AntiSpoofing
             AntiSpoofingLabelScore(label=label_score.label, score=label_score.score)
             for label_score in result.label_scores
         ],
+        audio_quality=audio_quality,
     )
 
 
@@ -73,9 +87,30 @@ async def detect_spoofed_voice(
         )
         temp_paths.append(wav_file)
 
+        quality = analyze_standard_wav_quality(
+            wav_path=wav_file,
+            target_sample_rate=settings.target_sample_rate,
+            min_analyzable_seconds=settings.voice_session_min_analyzable_seconds,
+            min_rms_energy=settings.voice_session_min_rms_energy,
+            min_speech_ratio=settings.voice_session_min_speech_ratio,
+        )
+
         # Load the model only after the upload is valid and converted.
+        inference_started_at = perf_counter()
         result = get_anti_spoofing_service().detect_file(wav_file)
-        return anti_spoofing_result_to_response(result)
+        processing_time_ms = round((perf_counter() - inference_started_at) * 1000.0, 2)
+        return anti_spoofing_result_to_response(
+            result,
+            processing_time_ms=processing_time_ms,
+            audio_quality=AntiSpoofingAudioQuality(
+                is_analyzable=quality.is_analyzable,
+                message=quality.message,
+                duration_seconds=quality.duration_seconds,
+                rms_energy=quality.rms_energy,
+                peak_amplitude=quality.peak_amplitude,
+                speech_ratio=quality.speech_ratio,
+            ),
+        )
 
     except MissingAudioFileError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -98,6 +133,11 @@ async def detect_spoofed_voice(
         ) from exc
     except AudioValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except AudioQualityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     except AntiSpoofingError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

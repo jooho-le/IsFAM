@@ -501,6 +501,7 @@ ISFAM_ANTI_SPOOFING_THRESHOLD=0.50 uvicorn app.main:app --reload
 ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE=0.80 uvicorn app.main:app --reload
 ISFAM_ANTI_SPOOFING_BATCH_SIZE=4 uvicorn app.main:app --reload
 ISFAM_PRELOAD_MODELS=true uvicorn app.main:app --reload
+ISFAM_PRELOAD_SPEAKER_MODEL=false uvicorn app.main:app --reload
 ISFAM_DEVICE=cpu uvicorn app.main:app --reload
 ```
 
@@ -521,6 +522,9 @@ ISFAM_ANTI_SPOOFING_BATCH_SIZE
 
 ISFAM_PRELOAD_MODELS
 서버 시작 시 두 AI 모델을 로드하고 워밍업할지 여부, 기본값 true
+
+ISFAM_PRELOAD_SPEAKER_MODEL
+딥보이스 전용 배포에서 가족 화자 모델 사전 로딩을 끌 수 있으며 기본값은 true
 
 ISFAM_DATABASE_PATH
 SQLite DB 경로, 기본값 data/isfam.sqlite3

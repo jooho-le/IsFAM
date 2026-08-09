@@ -6,10 +6,32 @@ class AntiSpoofingLabelScore(BaseModel):
     score: float = Field(..., examples=[0.91])
 
 
+class AntiSpoofingAudioQuality(BaseModel):
+    """Call-audio quality information used to qualify the model result."""
+
+    is_analyzable: bool
+    message: str
+    duration_seconds: float
+    rms_energy: float
+    peak_amplitude: float
+    speech_ratio: float
+
+
 class AntiSpoofingResponse(BaseModel):
     """Response for one anti-spoofing/deepfake detection result."""
 
     model_config = ConfigDict(protected_namespaces=())
+
+    analysis_status: str = Field(
+        default="complete",
+        description="complete or more_voice_required when call audio is unreliable.",
+        examples=["complete"],
+    )
+    processing_time_ms: float = Field(
+        default=0.0,
+        description="Server-side deepvoice model inference time in milliseconds.",
+        examples=[430.25],
+    )
 
     is_spoofed: bool = Field(
         ...,
@@ -45,3 +67,4 @@ class AntiSpoofingResponse(BaseModel):
         ...,
         description="Label scores from the segment that produced spoof_score.",
     )
+    audio_quality: AntiSpoofingAudioQuality | None = None
