@@ -25,6 +25,7 @@ mobile/dist/
 pretrained_models/
 .cache/
 /models/
+/artifacts/
 *.ckpt
 *.pt
 *.pth

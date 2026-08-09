@@ -8,6 +8,7 @@ from app.core.config import Settings, get_settings
 from app.schemas.anti_spoofing import (
     AntiSpoofingAudioQuality,
     AntiSpoofingLabelScore,
+    AntiSpoofingModelInfoResponse,
     AntiSpoofingResponse,
 )
 from app.services.anti_spoofing_service import AntiSpoofingError, AntiSpoofingResult
@@ -28,6 +29,28 @@ from app.utils.audio_quality import AudioQualityError, analyze_standard_wav_qual
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/anti-spoofing", tags=["anti-spoofing"])
+
+
+@router.get("/model-info", response_model=AntiSpoofingModelInfoResponse)
+async def get_anti_spoofing_model_info(
+    settings: Settings = Depends(get_settings),
+) -> AntiSpoofingModelInfoResponse:
+    """Return the active deepvoice model contract for clients and operations."""
+
+    service = get_anti_spoofing_service()
+    return AntiSpoofingModelInfoResponse(
+        status="ready",
+        model_name=service.model_name,
+        model_version=settings.anti_spoofing_model_version,
+        device=service.device,
+        threshold=service.threshold,
+        sample_rate=service.target_sample_rate,
+        max_audio_seconds=service.max_audio_seconds,
+        window_seconds=service.window_seconds,
+        hop_seconds=service.hop_seconds,
+        batch_size=service.batch_size,
+        warmed_up=service.is_warmed_up,
+    )
 
 
 def anti_spoofing_result_to_response(

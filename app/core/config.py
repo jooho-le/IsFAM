@@ -55,6 +55,7 @@ class Settings:
 
     # Hugging Face audio classification model for real/spoof voice detection.
     anti_spoofing_model_name: str = "Vansh180/deepfake-audio-wav2vec2"
+    anti_spoofing_model_version: str = "2026-08-v1"
     anti_spoofing_model_dir: Path = Path("pretrained_models/deepfake-audio-wav2vec2")
     anti_spoofing_threshold: float = 0.50
     anti_spoofing_spoof_labels: Tuple[str, ...] = (
@@ -277,6 +278,9 @@ def get_settings() -> Settings:
             "ISFAM_ANTI_SPOOFING_MODEL_NAME",
             "Vansh180/deepfake-audio-wav2vec2",
             dotenv_values,
+        ),
+        anti_spoofing_model_version=_get_env(
+            "ISFAM_ANTI_SPOOFING_MODEL_VERSION", "2026-08-v1", dotenv_values
         ),
         anti_spoofing_model_dir=Path(
             _get_env(

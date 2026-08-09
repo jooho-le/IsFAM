@@ -138,10 +138,15 @@ def main() -> int:
         onnx_correct += int(onnx_same == expected_same)
         max_pair_delta = max(max_pair_delta, abs(pytorch_score - onnx_score))
 
+    try:
+        model_display = str(args.model.relative_to(ROOT_DIR))
+    except ValueError:
+        model_display = str(args.model)
+
     report_lines = [
         "# Speaker ONNX Validation",
         "",
-        f"- model: `{args.model.relative_to(ROOT_DIR)}`",
+        f"- model: `{model_display}`",
         f"- model size: {args.model.stat().st_size / (1024 * 1024):.2f} MB",
         f"- audio samples: {len(samples)}",
         f"- comparison pairs: {pair_count}",

@@ -28,6 +28,15 @@ changing the audio field or response body below.
 
 ## Deepvoice detection API
 
+### Model information
+
+```http
+GET /api/v1/anti-spoofing/model-info
+```
+
+Returns readiness, model name/version, device, threshold, window settings, and batch size. The
+deployment version is configured with `ISFAM_ANTI_SPOOFING_MODEL_VERSION`.
+
 ### Request
 
 ```http
@@ -144,3 +153,7 @@ mono PCM float32, 16 kHz
 The macOS CPU PoC measured the ONNX neural core slower than the current PyTorch full pipeline,
 so no mobile speed claim is made yet. Android real-device latency, memory, battery use, and
 frontend equivalence must be measured before shipping.
+
+The optional INT8 export is 20.52 MB (74.2% smaller than FP32) and retained 45/45 decisions on
+the current dataset. Its maximum pair-similarity delta was 0.01781, so threshold calibration
+and Android real-device measurements are required before choosing it over FP32.

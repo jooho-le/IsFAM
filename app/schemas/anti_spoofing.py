@@ -17,6 +17,24 @@ class AntiSpoofingAudioQuality(BaseModel):
     speech_ratio: float
 
 
+class AntiSpoofingModelInfoResponse(BaseModel):
+    """Operational metadata for the loaded deepvoice model."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    status: str = Field(..., examples=["ready"])
+    model_name: str
+    model_version: str
+    device: str
+    threshold: float
+    sample_rate: int
+    max_audio_seconds: float
+    window_seconds: float
+    hop_seconds: float
+    batch_size: int
+    warmed_up: bool
+
+
 class AntiSpoofingResponse(BaseModel):
     """Response for one anti-spoofing/deepfake detection result."""
 
