@@ -1,0 +1,14 @@
+.git
+.venv
+artifacts
+data
+datasets
+demo_samples
+mobile
+models
+pretrained_models
+reports
+__pycache__
+*.pyc
+*.log
+.env

@@ -495,11 +495,26 @@ http://127.0.0.1:5173
 
 설정은 `app/core/config.py`에 있으며 `ISFAM_` prefix로 덮어쓸 수 있습니다.
 
+### Docker로 딥보이스 서버 실행
+
+```bash
+docker compose up --build ai postgres
+```
+
+첫 실행에서는 딥보이스 모델을 내려받아 named volume에 보관하므로 시작 시간이 더
+길 수 있습니다. 기본 설정은 CPU 단일 worker와 프로세스 내부 최대 동시 추론 2개입니다.
+실제 배포 인스턴스에서는 아래 부하 테스트를 다시 실행한 뒤 replica 수를 정합니다.
+
+```bash
+.venv/bin/python scripts/benchmark_deepvoice_api.py
+```
+
 ```bash
 ISFAM_SPEAKER_THRESHOLD=0.65 uvicorn app.main:app --reload
 ISFAM_ANTI_SPOOFING_THRESHOLD=0.50 uvicorn app.main:app --reload
 ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE=0.80 uvicorn app.main:app --reload
 ISFAM_ANTI_SPOOFING_BATCH_SIZE=4 uvicorn app.main:app --reload
+ISFAM_ANTI_SPOOFING_MAX_CONCURRENCY=2 uvicorn app.main:app --reload
 ISFAM_ANTI_SPOOFING_MODEL_VERSION=2026-08-v1 uvicorn app.main:app --reload
 ISFAM_PRELOAD_MODELS=true uvicorn app.main:app --reload
 ISFAM_PRELOAD_SPEAKER_MODEL=false uvicorn app.main:app --reload
@@ -520,6 +535,9 @@ ISFAM_VOICE_SESSION_STRONG_SPOOF_SCORE
 
 ISFAM_ANTI_SPOOFING_BATCH_SIZE
 딥보이스 음성 구간을 한 번에 처리할 배치 크기, 기본값 4
+
+ISFAM_ANTI_SPOOFING_MAX_CONCURRENCY
+한 프로세스에서 동시에 실행할 딥보이스 추론 수, 기본값 2
 
 ISFAM_ANTI_SPOOFING_MODEL_VERSION
 운영 중인 딥보이스 모델의 배포 버전

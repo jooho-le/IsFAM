@@ -1,8 +1,11 @@
 import logging
+import asyncio
+from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
 from app.schemas.anti_spoofing import (
@@ -31,6 +34,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/anti-spoofing", tags=["anti-spoofing"])
 
 
+@lru_cache(maxsize=1)
+def get_anti_spoofing_semaphore() -> asyncio.Semaphore:
+    return asyncio.Semaphore(get_settings().anti_spoofing_max_concurrency)
+
+
 @router.get("/model-info", response_model=AntiSpoofingModelInfoResponse)
 async def get_anti_spoofing_model_info(
     settings: Settings = Depends(get_settings),
@@ -49,6 +57,7 @@ async def get_anti_spoofing_model_info(
         window_seconds=service.window_seconds,
         hop_seconds=service.hop_seconds,
         batch_size=service.batch_size,
+        max_concurrency=settings.anti_spoofing_max_concurrency,
         warmed_up=service.is_warmed_up,
     )
 
@@ -103,14 +112,16 @@ async def detect_spoofed_voice(
         )
         temp_paths.append(original_file)
 
-        wav_file = convert_audio_to_standard_wav(
+        wav_file = await run_in_threadpool(
+            convert_audio_to_standard_wav,
             input_path=original_file,
             target_sample_rate=settings.target_sample_rate,
             min_audio_seconds=settings.min_audio_seconds,
         )
         temp_paths.append(wav_file)
 
-        quality = analyze_standard_wav_quality(
+        quality = await run_in_threadpool(
+            analyze_standard_wav_quality,
             wav_path=wav_file,
             target_sample_rate=settings.target_sample_rate,
             min_analyzable_seconds=settings.voice_session_min_analyzable_seconds,
@@ -120,7 +131,11 @@ async def detect_spoofed_voice(
 
         # Load the model only after the upload is valid and converted.
         inference_started_at = perf_counter()
-        result = get_anti_spoofing_service().detect_file(wav_file)
+        async with get_anti_spoofing_semaphore():
+            result = await run_in_threadpool(
+                get_anti_spoofing_service().detect_file,
+                wav_file,
+            )
         processing_time_ms = round((perf_counter() - inference_started_at) * 1000.0, 2)
         return anti_spoofing_result_to_response(
             result,

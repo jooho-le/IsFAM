@@ -70,6 +70,7 @@ class Settings:
     anti_spoofing_window_seconds: float = 5.0
     anti_spoofing_hop_seconds: float = 2.5
     anti_spoofing_batch_size: int = 4
+    anti_spoofing_max_concurrency: int = 2
     preload_models: bool = True
     preload_speaker_model: bool = True
 
@@ -109,6 +110,8 @@ class Settings:
             raise ValueError("ISFAM_ANTI_SPOOFING_HOP_SECONDS must be greater than 0")
         if self.anti_spoofing_batch_size < 1:
             raise ValueError("ISFAM_ANTI_SPOOFING_BATCH_SIZE must be at least 1")
+        if self.anti_spoofing_max_concurrency < 1:
+            raise ValueError("ISFAM_ANTI_SPOOFING_MAX_CONCURRENCY must be at least 1")
         if self.voice_session_min_analyzable_seconds < self.min_audio_seconds:
             raise ValueError(
                 "ISFAM_VOICE_SESSION_MIN_ANALYZABLE_SECONDS must be greater than "
@@ -316,6 +319,9 @@ def get_settings() -> Settings:
         ),
         anti_spoofing_batch_size=_get_int_env(
             "ISFAM_ANTI_SPOOFING_BATCH_SIZE", 4, dotenv_values
+        ),
+        anti_spoofing_max_concurrency=_get_int_env(
+            "ISFAM_ANTI_SPOOFING_MAX_CONCURRENCY", 2, dotenv_values
         ),
         preload_models=_get_bool_env("ISFAM_PRELOAD_MODELS", True, dotenv_values),
         preload_speaker_model=_get_bool_env(

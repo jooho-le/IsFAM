@@ -32,6 +32,7 @@ class AntiSpoofingModelInfoResponse(BaseModel):
     window_seconds: float
     hop_seconds: float
     batch_size: int
+    max_concurrency: int
     warmed_up: bool
 
 
