@@ -28,6 +28,15 @@ changing the audio field or response body below.
 
 ## Deepvoice detection API
 
+### Model information
+
+```http
+GET /api/v1/anti-spoofing/model-info
+```
+
+Returns readiness, model name/version, device, threshold, window settings, and batch size. The
+deployment version is configured with `ISFAM_ANTI_SPOOFING_MODEL_VERSION`.
+
 ### Request
 
 ```http
@@ -105,3 +114,46 @@ Before this can be implemented, the ECAPA speaker model must be exported to ONNX
 against the current PyTorch embeddings. The ONNX asset, Android ONNX Runtime dependency,
 Capacitor native bridge, Keystore-backed encryption, and real-device benchmarks are not yet
 present in this repository.
+
+## Speaker ONNX proof of concept
+
+The ECAPA neural core is now reproducibly exportable:
+
+```bash
+.venv/bin/pip install -r requirements-onnx.txt
+HF_HUB_OFFLINE=1 .venv/bin/python scripts/export_speaker_onnx.py
+HF_HUB_OFFLINE=1 .venv/bin/python scripts/evaluate_speaker_onnx.py
+```
+
+Generated model (git-ignored):
+
+```text
+models/onnx/ecapa_tdnn_voiceprint.onnx
+input  = float32[batch, frames, 80]
+output = float32[batch, 192]
+size   = 79.61 MB
+```
+
+Validation on the current 10 files and 45 speaker pairs produced 100% PyTorch/ONNX
+decision agreement. See `reports/speaker_onnx_validation.md` for numerical differences and
+timings.
+
+Raw-waveform export is not complete. SpeechBrain's STFT frontend currently fails the ONNX
+export path because it uses complex tensor operations. Android must reproduce this frontend:
+
+```text
+mono PCM float32, 16 kHz
+-> 25 ms window / 10 ms hop / 400-point FFT
+-> 80-bin FBank
+-> per-utterance mean normalization (no standard-deviation normalization)
+-> ECAPA ONNX model
+-> 192-value voiceprint
+```
+
+The macOS CPU PoC measured the ONNX neural core slower than the current PyTorch full pipeline,
+so no mobile speed claim is made yet. Android real-device latency, memory, battery use, and
+frontend equivalence must be measured before shipping.
+
+The optional INT8 export is 20.52 MB (74.2% smaller than FP32) and retained 45/45 decisions on
+the current dataset. Its maximum pair-similarity delta was 0.01781, so threshold calibration
+and Android real-device measurements are required before choosing it over FP32.

@@ -1,4 +1,25 @@
 services:
+  ai:
+    build: .
+    container_name: isfam_ai
+    restart: unless-stopped
+    environment:
+      ISFAM_DATABASE_URL: postgresql+psycopg2://isfam:isfam@postgres:5432/isfam
+      ISFAM_JWT_SECRET_KEY: ${ISFAM_JWT_SECRET_KEY:-local-compose-change-me}
+      ISFAM_PRELOAD_MODELS: "true"
+      ISFAM_PRELOAD_SPEAKER_MODEL: "false"
+      ISFAM_ANTI_SPOOFING_BATCH_SIZE: "4"
+      ISFAM_ANTI_SPOOFING_MAX_CONCURRENCY: "2"
+      ISFAM_DEVICE: cpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - isfam_ai_models:/app/pretrained_models
+      - isfam_ai_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     container_name: isfam_postgres
@@ -19,3 +40,5 @@ services:
 
 volumes:
   isfam_postgres_data:
+  isfam_ai_models:
+  isfam_ai_data:

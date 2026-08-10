@@ -111,6 +111,10 @@ class AntiSpoofingService:
         self._is_warmed_up = True
         logger.info("Anti-spoofing model warmed up with batch_size=%s", self.batch_size)
 
+    @property
+    def is_warmed_up(self) -> bool:
+        return self._is_warmed_up
+
     def detect_file(self, wav_path: Path) -> AntiSpoofingResult:
         """Run real/spoof classification on multiple windows of a normalized wav file."""
 
