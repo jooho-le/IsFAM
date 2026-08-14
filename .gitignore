@@ -61,3 +61,6 @@ audio_samples/
 .DS_Store
 .idea/
 .vscode/
+
+api-state.md
+erd.md

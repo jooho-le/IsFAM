@@ -7,7 +7,7 @@ from alembic import context
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models import RefreshToken, User  # noqa: F401  (registers tables on Base.metadata)
+from app.models import Device, RefreshToken, User  # noqa: F401  (registers tables on Base.metadata)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
