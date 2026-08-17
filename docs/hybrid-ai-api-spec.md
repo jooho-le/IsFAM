@@ -4,9 +4,9 @@
 
 ```text
 Android
-  - ONNX speaker embedding inference (pending)
-  - encrypted family voiceprint storage (pending)
-  - local cosine-similarity decision (pending)
+  - ONNX speaker embedding inference (implemented in isfam-app; device validation pending)
+  - encrypted family voiceprint storage (implemented with Android Keystore)
+  - local cosine-similarity decision (implemented; threshold 0.65)
   - uploads only the call-audio segment needed for deepvoice detection
 
 FastAPI
@@ -23,8 +23,10 @@ ISFAM_PRELOAD_MODELS=true
 ISFAM_PRELOAD_SPEAKER_MODEL=false
 ```
 
-The Java product server is outside this repository. It may proxy this request later without
-changing the audio field or response body below.
+The Java product server is outside this repository. At commit `669af54`, it contains the
+`isfam.fastapi.base-url` setting but no controller/client that proxies this request. Until that
+proxy is implemented, an Android client configured with the Java server URL cannot reach the
+deepvoice endpoint. The proxy should preserve the audio field and response body below.
 
 ## Deepvoice detection API
 
@@ -96,7 +98,7 @@ segment; it must not treat the raw `is_spoofed` value as a confirmed warning in 
 | `422` | File cannot be decoded or inspected |
 | `500` | Model loading or inference failed |
 
-## Android contract (pending implementation)
+## Android contract
 
 The on-device family verifier should expose this logical result to the app UI:
 
@@ -110,10 +112,11 @@ The on-device family verifier should expose this logical result to the app UI:
 }
 ```
 
-Before this can be implemented, the ECAPA speaker model must be exported to ONNX and verified
-against the current PyTorch embeddings. The ONNX asset, Android ONNX Runtime dependency,
-Capacitor native bridge, Keystore-backed encryption, and real-device benchmarks are not yet
-present in this repository.
+The Kotlin implementation now lives in the separate `isfam-app` repository. It includes the
+INT8 ECAPA asset, ONNX Runtime, SpeechBrain-compatible FBank preprocessing, local cosine
+matching, Keystore-backed AES-GCM storage, and a hybrid result combiner. JVM golden tests and
+debug APK packaging pass. Real-device ONNX execution, latency, memory, battery, and threshold
+calibration are still required before release.
 
 ## Speaker ONNX proof of concept
 
