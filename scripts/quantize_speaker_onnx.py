@@ -1,4 +1,8 @@
-"""Create an optional INT8 ECAPA ONNX candidate for Android benchmarking."""
+"""Create a mobile-safe ECAPA ONNX candidate.
+
+Dynamic Conv quantization emits ConvInteger nodes which are not executable on
+some Android ONNX Runtime targets. Keep convolution layers in FP32 here.
+"""
 
 from argparse import ArgumentParser
 from pathlib import Path
@@ -24,7 +28,8 @@ def main() -> int:
         str(args.input),
         str(args.output),
         weight_type=QuantType.QInt8,
-        op_types_to_quantize=["Conv", "MatMul", "Gemm"],
+        # Do not add Conv: dynamic Conv quantization produces ConvInteger.
+        op_types_to_quantize=["MatMul", "Gemm"],
     )
     print(f"saved: {args.output}")
     print(f"fp32_mb: {args.input.stat().st_size / (1024 * 1024):.2f}")
